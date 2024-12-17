@@ -1,1 +1,1 @@
-# playwright_java
+# playwright_java gradle owner lombok
