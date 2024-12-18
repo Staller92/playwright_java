@@ -1,6 +1,5 @@
 package com.tests;
 
-import com.google.common.collect.ImmutableMap;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
@@ -9,20 +8,23 @@ import com.pages.LoginPage;
 import com.utils.BasePageFactory;
 import com.utils.BrowserManager;
 import io.qameta.allure.Attachment;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.AfterTestExecutionCallback;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.platform.commons.logging.Logger;
+import org.junit.platform.commons.logging.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Optional;
 
 import static com.config.ConfigurationManager.config;
-import static com.github.automatedowl.tools.AllureEnvironmentWriter.allureEnvironmentWriter;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class BaseTest {
+
+    private static final Logger log = LoggerFactory.getLogger(BaseTest.class);
 
     protected Playwright playwright;
     protected Browser browser;
@@ -63,9 +65,13 @@ public abstract class BaseTest {
 
 
     @Attachment(value = "Test Video", type = "video/webm")
-    @SneakyThrows
     private byte[] captureVideo() {
-        return Files.readAllBytes(page.video().path());
+        try {
+            return Files.readAllBytes(page.video().path());
+        } catch (IOException e) {
+            log.error(e, () -> "Video capture is failed");
+            throw new RuntimeException(e);
+        }
     }
 
     @Attachment(value = "Failed Test Case Screenshot", type = "image/png")
@@ -78,15 +84,6 @@ public abstract class BaseTest {
     public void initBrowser() {
         playwright = Playwright.create();
         browser = BrowserManager.getBrowser(playwright);
-
-        allureEnvironmentWriter(
-                ImmutableMap.<String, String>builder()
-                        .put("Platform", System.getProperty("os.name"))
-                        .put("Version", System.getProperty("os.version"))
-                        .put("Browser", config().browser().toUpperCase())
-                        .put("Context URL", config().baseUrl())
-                        .build(),
-                config().allureResultsDir() + "/");
     }
 
     @AfterAll

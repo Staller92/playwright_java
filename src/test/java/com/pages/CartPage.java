@@ -3,7 +3,6 @@ package com.pages;
 
 import com.components.Header;
 import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Page;
 import com.models.ShipInfo;
 import io.qameta.allure.Step;
 

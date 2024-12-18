@@ -4,7 +4,6 @@ package com.pages;
 import com.components.Header;
 import com.components.SideNavMenu;
 import com.microsoft.playwright.Locator;
-import com.microsoft.playwright.Page;
 import com.utils.BasePageFactory;
 import io.qameta.allure.Step;
 
