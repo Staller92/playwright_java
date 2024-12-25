@@ -1,0 +1,164 @@
+1. go to AWS EC2 => create instance Ubuntu for Jenkins-master (also create ssh keys for accses to machine) open ports (8080)
+connect to instance by by public ip (43.206.151.102) and ssh key (MobaXterm)
+Perform commands:
+Update system
+sudo apt update
+sudo apt upgrade -y
+
+Jenkins requires Java. Install OpenJDK 11 or 17
+sudo apt install -y openjdk-17-jre
+java -version
+
+Install jenkins
+sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
+  https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc]" \
+  https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+  /etc/apt/sources.list.d/jenkins.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y jenkins
+
+Start and Enable Jenkins Service
+sudo systemctl enable jenkins (will start jenkis on every reboot)
+sudo systemctl start jenkins
+sudo systemctl status jenkins
+
+Add an ability to connect via ssh
+sudo nano /etc/ssh/sshd_config (set PubkeyAuthentication yes / AuthorizedKeysFile)                            
+sudo service ssh reload
+
+Change hostname (optional)
+sudo nano /etc/hostname (Jenkis-master)
+Restart machine
+sudo init 6 
+
+3. Generate ssh public and private keys (public key have to be copied (added to the end as there is a key wchich was creted on aws) to the agent machine /home/ubuntu/.ssh/authorized_keys)
+ssh-keygen -t rsa -b 4096
+
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCU+cDh9gP73h2+zhgidRIR2C7g6zHOj9dN6sCyId22WUys3fEvEF+iEORcwp7VC25irNTcV7FTw/v5XiWvyazJQPjggCblGn97fZArTV94PCigwKfLwyK4dLHh1EPikNmdkLcQ9MsBJ2sH0PttqiNSOWn9AR1PNMHw9/WQ1Q/KmCahp6y2I78Br0OggjOjgxkmqJx0YHh3I1s0otWI6DCYaNDWGkUbjB4c37O6UbawHe5eFSrbc03yWf89aYcASPJwK3/KiL2mHzfGLjiObFTUkNDyyzVDtm0ZsIo59K1IKgZJxPs0fxymlTgtP9pC6kmR1n3Ku//vBNXfT6cd6Uc1YxvVvAUuNVojQTCcgvpgsFIJ91yIF6768nZ1PilqsNs5SPm55IkXpZpjwGo41jxMaA2UPdJKpMSKi/0VRi0ofHc5Zj0IwHymN9keKeBp7sJOc7mQGBOu0NOGcJPbKPsW1nKc8uH3we+QeLcgA4jGoeCJDIQq1r365nUb9/YcJ5i2RRT3kxBTIE6L3Dsp31iW1xEsW+7u1+HY4O1U6/lW5LwagzdJ77iIYZzF3ol3OEtqCEQNuBWcekBTugvrHBdWUrkuseRgs48tSXtz7sG/TgVMSru6hYmbhrokrTOWGt8Y/2QbXR5jaSeQpw5Kpb8vABA8PjlzK8s3IDDLbvc/kw== ubuntu@Jenkis-master
+
+Retrieve the initial admin password:
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+Copy the password, paste it into the Jenkins setup page, and follow the instructions to complete the installation.
+25efe54209684bfbb9092a5b7b582b10
+
+Make number of executors equals zero (As it is master mnode)
+Add node 
+set remote root directory /home/ubuntu
+Connect to the node by privite host adress of aws instance of jenkins-agent via ssh using private key / user - ubuntu
+
+2. go to AWS EC2 => create instance Ubuntu for Jenkins-agent (also create ssh keys for accses to machine)
+connect to instance by by public ip (13.206.151.102) and ssh key (MobaXterm)
+Perform commands:
+Update system
+sudo apt update
+sudo apt upgrade -y
+
+Jenkins requires Java. Install OpenJDK 11 or 17
+sudo apt install -y openjdk-17-jre
+java -version
+
+Install Docker
+Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+
+sudo docker run hello-world
+
+Allow Non-Root Users to Use Docker (Optional)
+sudo usermod -aG docker $USER
+
+Change hostname (optional)
+sudo nano /etc/hostname (Jenkis-master)
+Restart machine
+sudo init 6
+
+Add an ability to connect via ssh
+sudo nano /etc/ssh/sshd_config (uncomment PubkeyAuthentication yes / uncomment AuthorizedKeysFile)                            
+sudo service ssh reload
+
+Add public key (look at point 3) from master to sudo nano /home/ubuntu/.ssh/authorized_keys
+
+// agent and docker //
+
+docker network create jenkins
+
+docker run -d --rm \
+  --name=agent \
+  --publish 2200:22 \
+  --network jenkins \
+  -e "JENKINS_AGENT_SSH_PUBKEY=$(cat ~/.ssh/authorized_keys)" \
+  jenkins/ssh-agent
+
+version: '3.8'
+
+services:
+  jenkins-agent:
+    image: jenkins/ssh-agent
+    container_name: jenkins-agent
+    ports:
+      - "2200:22"
+    environment:
+      - JENKINS_AGENT_SSH_PUBKEY=ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCHYPUE4bIZj5An8FP5VIMS1cVQ6Qhbw3gHoRC0Z6OaDxZC3QkumrEu3/Q5y+j7Dwt666UPcn6W47UvkDneQLBKHyxLK4x8yIw57hBu6wPFO/0/YvChhaP6Lm0huS3Lt7jzZmWqmQp63Zj5vGMLAon0DJn2yryUOzpl5O3QfOfSBYV2U8K/02xhtv7yuI3YH0PW7H6ZX8bWJBkLuJUbXOEhk5k2nSVJ125NXfdmKyGD1RzH2JNvwzDGmV5LyRBIzBCBOTVEh+eo1G4bW/zQeYjPu5u4RdFrqYV/aNPVyt/xXdBKJi4mhSLC7jnAKXO33PyriJ8hYs3349iaNg6pfMWwst2w3cRHgfCT+O7pfB4h6BbfPCCtkV+L/72C0fLNLwHlg1fwAjTfsqXT5fDIdfqnAy2h3h5D/tFvGOQgjGPiP8cfl/THzvdouK0CFfYl+Eojq3hQpcSXu4rYxXHliAL08lpSSWzul+h2HoYIq+vgURrI8Ua9PSLUYarLcb9j1N4yef/ctElZjeC2I0466C4nEuSUpKjKOiaZwvOAi9bZcJF98sLGpY81YTsg0/q6uAc7kHnkSVCWIZ69FZP7HsLhU2mKrb2pocRWfLK7/zFE7zFIhu0Ug2jDUxETPzToVBARJh1AF7nkUfx6XKx21yPlbCLJ9WO0+0cyTYjmc1N6vw== ubuntu@Jenkins-master
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./workspace:/workspace
+    restart: unless-stopped
+    depends_on:
+      - git
+      - maven
+
+ git:
+    image: alpine/git
+    container_name: git-container
+    volumes:
+      - ${HOME}:/root
+      - ./workspace:/git
+    entrypoint: /bin/sh  # Оставляем контейнер в режиме ожидания для выполнения команд
+    restart: unless-stopped
+
+  maven:
+    image: maven:3.8.5-openjdk-17
+    container_name: maven-container
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./workspace:/workspace
+      - ./maven-repo:/root/.m2
+    restart: unless-stopped
+
+volumes:
+  workspace:
+  maven-repo:
+
+https://hub.docker.com/r/jenkins/inbound-agent/ 
+
+docker run -d --rm --init --name jenkins-agent-docker \
+  --privileged \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v jenkins_home:/var/jenkins_home \
+  jenkins-agent-dind \
+  -url http://3.66.155.240:8080/ \
+  -name Jenkins-agent \
+  -secret 548fed44ce6ca03e888c499a81b362f4fb6894874e9bb3511c4fd06a71ebcbd9
+
+docker run -d --rm --init \
+  --name jenkins-agent-dind \
+  --privileged \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v jenkins:/home/jenkins \
+  jenkins-agent-dind \
+  -url http://3.66.155.240:8080 \
+  -secret 548fed44ce6ca03e888c499a81b362f4fb6894874e9bb3511c4fd06a71ebcbd9 \
+  -name "Jenkins-agent"
