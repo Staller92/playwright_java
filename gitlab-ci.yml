@@ -1,0 +1,75 @@
+stages:
+  - stage_build
+  - stage_test
+  - stage_generate_report
+  - stage_publich_report
+
+#cache: in order to work cache for .m2 "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+#  paths:
+#    - /root/.m2/repository
+#  policy: pull-push
+
+
+image: maven:3.9.4-eclipse-temurin-17
+
+build_job:
+  tags:
+    - build
+  stage: stage_build
+  script:
+    - echo "Checking Maven repository volume..."
+    - ls -l /root/.m2/repository || echo "No repository found"
+    - ls -l
+    - mvn clean package -DskipTests=true
+    - ls -l target/
+    - ls -l
+    - echo "Checking Maven repository volume after..."
+    - ls -l /root/.m2/repository || echo "No repository found"
+  artifacts:
+    paths:
+      - ${CI_PROJECT_DIR}/target/
+    expire_in: 1 week
+
+test_job:
+  tags:
+    - build
+  stage: stage_test
+  script:
+    - mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="install-deps"
+    - ls -l target/
+    - mvn test
+  artifacts:
+    paths:
+      - ${CI_PROJECT_DIR}/target/
+    expire_in: 1 week
+
+report_job:
+  stage: stage_generate_report
+  #before_script:
+    #- apt-get update && apt-get install -y unzip
+    #- apt-get update && apt-get install -y curl jq
+    #- ARTIFACTS_CHECK_URL="https://$CI_SERVER_HOST/api/v4/projects/$CI_PROJECT_ID/jobs/artifacts/$CI_DEFAULT_BRANCH/download?job=pages&private_token=$PRIVATE_TOKEN"
+    #- echo $ARTIFACTS_CHECK_URL
+    #- curl -k --location --output artifacts.zip $ARTIFACTS_CHECK_URL
+    #- unzip artifacts.zip
+    #- chmod -R 777 public
+    #- mkdir -p allure-results && cp -r public/history allure-results
+  script:
+    - mvn allure:report
+  artifacts:
+    paths:
+      - ${CI_PROJECT_DIR}/target/site/allure-maven-plugin
+    expire_in: 1 week
+
+pages:
+  stage: stage_publich_report
+  needs:
+    - report_job
+  script:
+    - mkdir public
+    - cp -r ${CI_PROJECT_DIR}/target/site/allure-maven-plugin/* public/
+  artifacts:
+    when: on_success
+    expire_in: 1 week
+    paths:
+      - public
